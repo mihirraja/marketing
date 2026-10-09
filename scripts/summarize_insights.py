@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import json
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
 import pandas as pd
 
 from load_data import PROJECT_ROOT
@@ -9,10 +14,12 @@ from load_data import PROJECT_ROOT
 
 ANALYSIS_DIR = PROJECT_ROOT / "analysis"
 OUTPUT_DIR = PROJECT_ROOT / "outputs"
+RUNS_DIR = OUTPUT_DIR / "runs"
 MONTHLY_PANEL = ANALYSIS_DIR / "monthly_peacock_panel.csv"
 QUARTERLY_PANEL = ANALYSIS_DIR / "quarterly_subscriber_panel.csv"
 CONCISE_REPORT_PATH = OUTPUT_DIR / "peacock_marketing_insights_concise.md"
 MEMO_REPORT_PATH = OUTPUT_DIR / "peacock_marketing_insights_memo.md"
+TIMEZONE = ZoneInfo("America/Los_Angeles")
 
 
 def format_bool(value: object) -> str:
@@ -325,16 +332,66 @@ def build_memo_report(monthly: pd.DataFrame, quarterly: pd.DataFrame) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def create_run_dir() -> tuple[str, Path]:
+    run_id = datetime.now(TIMEZONE).strftime("%Y%m%d_%H%M%S")
+    run_dir = RUNS_DIR / run_id
+    run_dir.mkdir(parents=True, exist_ok=False)
+    return run_id, run_dir
+
+
+def write_latest_reports(concise_report: str, memo_report: str) -> None:
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    CONCISE_REPORT_PATH.write_text(concise_report, encoding="utf-8")
+    MEMO_REPORT_PATH.write_text(memo_report, encoding="utf-8")
+
+
+def write_archived_run(
+    run_id: str,
+    run_dir: Path,
+    concise_report: str,
+    memo_report: str,
+    monthly: pd.DataFrame,
+    quarterly: pd.DataFrame,
+) -> None:
+    concise_path = run_dir / "peacock_marketing_insights_concise.md"
+    memo_path = run_dir / "peacock_marketing_insights_memo.md"
+    manifest_path = run_dir / "run_manifest.json"
+
+    concise_path.write_text(concise_report, encoding="utf-8")
+    memo_path.write_text(memo_report, encoding="utf-8")
+    manifest = {
+        "run_id": run_id,
+        "created_at_local": datetime.now(TIMEZONE).isoformat(timespec="seconds"),
+        "timezone": str(TIMEZONE),
+        "monthly_panel_rows": int(len(monthly)),
+        "quarterly_panel_rows": int(len(quarterly)),
+        "latest_outputs": {
+            "concise_report": str(CONCISE_REPORT_PATH.relative_to(PROJECT_ROOT)),
+            "memo_report": str(MEMO_REPORT_PATH.relative_to(PROJECT_ROOT)),
+        },
+        "archived_outputs": {
+            "concise_report": str(concise_path.relative_to(PROJECT_ROOT)),
+            "memo_report": str(memo_path.relative_to(PROJECT_ROOT)),
+        },
+        "source_panels": {
+            "monthly": str(MONTHLY_PANEL.relative_to(PROJECT_ROOT)),
+            "quarterly": str(QUARTERLY_PANEL.relative_to(PROJECT_ROOT)),
+        },
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
 def main() -> None:
     monthly, quarterly = load_panels()
     concise_report = build_concise_report(monthly, quarterly)
     memo_report = build_memo_report(monthly, quarterly)
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    CONCISE_REPORT_PATH.write_text(concise_report, encoding="utf-8")
-    MEMO_REPORT_PATH.write_text(memo_report, encoding="utf-8")
+    run_id, run_dir = create_run_dir()
+    write_latest_reports(concise_report, memo_report)
+    write_archived_run(run_id, run_dir, concise_report, memo_report, monthly, quarterly)
     print(concise_report)
     print(f"Saved concise report to {CONCISE_REPORT_PATH}")
     print(f"Saved memo report to {MEMO_REPORT_PATH}")
+    print(f"Archived run {run_id} to {run_dir}")
 
 
 if __name__ == "__main__":
