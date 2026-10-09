@@ -22,7 +22,7 @@ This project keeps monthly Nielsen viewing observations separate from Comcast qu
 Project Python interpreter:
 
 ```text
-marketing/bin/python
+.venv/bin/python
 ```
 
 Validate the dataset:
@@ -34,20 +34,31 @@ python3 scripts/validate_dataset.py
 Or with the project virtual environment:
 
 ```bash
-marketing/bin/python scripts/validate_dataset.py
+.venv/bin/python scripts/validate_dataset.py
 ```
 
 Run the first EDA summary:
 
 ```bash
-marketing/bin/python scripts/explore_dataset.py
+.venv/bin/python scripts/explore_dataset.py
 ```
 
 Create first-pass charts:
 
 ```bash
-marketing/bin/python scripts/make_charts.py
+.venv/bin/python scripts/make_charts.py
 ```
+
+Build analysis-ready tables:
+
+```bash
+.venv/bin/python scripts/build_analysis_tables.py
+```
+
+This writes:
+
+- `analysis/monthly_peacock_panel.csv`
+- `analysis/quarterly_subscriber_panel.csv`
 
 Load in Python:
 
@@ -55,7 +66,7 @@ Load in Python:
 import pandas as pd
 from pathlib import Path
 
-root = Path("peacock-marketing-analytics")
+root = Path(".")
 
 monthly = pd.read_csv(root / "data/peacock_marketing_analytics_2024_2026_monthly_viewing.csv")
 subs = pd.read_csv(root / "data/peacock_marketing_analytics_2024_2026_quarterly_subscribers.csv")

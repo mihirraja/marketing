@@ -9,6 +9,5 @@ venv/
 env/
 marketing/
 
-# Generated chart outputs can be recreated with scripts/make_charts.py
+# Generated outputs can be recreated with scripts.
 outputs/
-
