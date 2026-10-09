@@ -1,0 +1,14 @@
+.DS_Store
+.idea/
+__pycache__/
+*.py[cod]
+
+# Local Python environments
+.venv/
+venv/
+env/
+marketing/
+
+# Generated chart outputs can be recreated with scripts/make_charts.py
+outputs/
+
