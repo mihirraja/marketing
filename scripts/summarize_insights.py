@@ -22,10 +22,58 @@ def section(title: str, lines: list[str]) -> list[str]:
     return [f"## {title}", "", *lines, ""]
 
 
+def bullets(lines: list[str]) -> list[str]:
+    return [f"- {line}" for line in lines]
+
+
 def load_panels() -> tuple[pd.DataFrame, pd.DataFrame]:
     monthly = pd.read_csv(MONTHLY_PANEL, parse_dates=["period_month"])
     quarterly = pd.read_csv(QUARTERLY_PANEL, parse_dates=["quarter_end_date"])
     return monthly, quarterly
+
+
+def category_label(row: pd.Series) -> str:
+    categories = []
+    if row["has_sports_tentpole"]:
+        categories.append("Sports")
+    if row["has_entertainment_tentpole"]:
+        categories.append("Entertainment")
+    if row["has_mixed_tentpole"]:
+        categories.append("Mixed")
+    return " + ".join(categories) if categories else "No mapped tentpole"
+
+
+def summarize_executive_summary(
+    monthly: pd.DataFrame, quarterly: pd.DataFrame
+) -> list[str]:
+    top_month = monthly.sort_values(
+        "share_of_total_tv_viewing", ascending=False
+    ).iloc[0]
+    strongest_sub_quarter = quarterly.sort_values(
+        "net_adds_millions", ascending=False, na_position="last"
+    ).iloc[0]
+    q3_2024 = quarterly[quarterly["fiscal_quarter"] == "2024-Q3"].iloc[0]
+
+    lines = bullets(
+        [
+            f"Peacock's highest observed monthly TV share in this public panel is "
+            f"{top_month['share_of_total_tv_viewing']:.1f}% in "
+            f"{top_month['period_month']:%Y-%m}, a Sports + Entertainment month anchored by "
+            "Super Bowl and Winter Olympics programming.",
+            "The strongest repeat pattern is sports-led reach, with the largest TV-share "
+            "months tied to Olympics, Super Bowl, World Cup, and NFL tentpoles.",
+            "Love Island appears to be Peacock's clearest repeat entertainment tentpole, "
+            "showing up in both 2025 and 2026 summer viewing lifts.",
+            f"The cleanest content-linked subscriber case is 2024-Q3, when Peacock moved "
+            f"from 33M to {q3_2024['paid_subscribers_millions']:g}M paid subscribers "
+            "alongside Paris Olympics and Love Island momentum.",
+            f"The largest reported quarterly subscriber increase is "
+            f"{strongest_sub_quarter['fiscal_quarter']} at "
+            f"{strongest_sub_quarter['net_adds_millions']:g}M net adds, but that quarter "
+            "is marked as Mixed because Comcast tied the growth to Charter bundle entitlements.",
+        ]
+    )
+    return section("Executive Summary", lines)
 
 
 def summarize_top_viewing_months(monthly: pd.DataFrame) -> list[str]:
@@ -33,22 +81,18 @@ def summarize_top_viewing_months(monthly: pd.DataFrame) -> list[str]:
         "share_of_total_tv_viewing", ascending=False
     ).head(5)
 
-    lines = []
+    lines = [
+        "| Month | TV share | Tentpole category | Related tentpoles |",
+        "| --- | ---: | --- | --- |",
+    ]
     for _, row in top_months.iterrows():
-        categories = []
-        if row["has_sports_tentpole"]:
-            categories.append("Sports")
-        if row["has_entertainment_tentpole"]:
-            categories.append("Entertainment")
-        if row["has_mixed_tentpole"]:
-            categories.append("Mixed")
-        category_text = " + ".join(categories) if categories else "No mapped tentpole"
         lines.append(
-            f"{row['period_month']:%Y-%m}: "
-            f"{row['share_of_total_tv_viewing']:.1f}% TV share "
-            f"({category_text})"
+            f"| {row['period_month']:%Y-%m} | "
+            f"{row['share_of_total_tv_viewing']:.1f}% | "
+            f"{category_label(row)} | "
+            f"{row['related_tentpole_id']} |"
         )
-    return section("Top Peacock TV Share Months", lines)
+    return section("Evidence: Top Peacock TV Share Months", lines)
 
 
 def summarize_tentpole_patterns(monthly: pd.DataFrame) -> list[str]:
@@ -58,17 +102,19 @@ def summarize_tentpole_patterns(monthly: pd.DataFrame) -> list[str]:
         ("Mixed", "has_mixed_tentpole"),
     ]
 
-    lines = []
+    lines = [
+        "| Category | Observed months | Average TV share | Max TV share |",
+        "| --- | ---: | ---: | ---: |",
+    ]
     for label, column in flag_cols:
         subset = monthly[monthly[column]]
         if subset.empty:
-            lines.append(f"{label}: no observed months")
+            lines.append(f"| {label} | 0 | n.a. | n.a. |")
             continue
         avg_share = subset["share_of_total_tv_viewing"].mean()
         max_share = subset["share_of_total_tv_viewing"].max()
         lines.append(
-            f"{label}: {len(subset)} observed months, "
-            f"average TV share {avg_share:.2f}%, max {max_share:.1f}%"
+            f"| {label} | {len(subset)} | {avg_share:.2f}% | {max_share:.1f}% |"
         )
 
     both = monthly[
@@ -76,7 +122,7 @@ def summarize_tentpole_patterns(monthly: pd.DataFrame) -> list[str]:
     ]
     if not both.empty:
         months = ", ".join(both["period_month"].dt.strftime("%Y-%m"))
-        lines.append(f"Sports + Entertainment overlap months: {months}")
+        lines.extend(["", f"Sports + Entertainment overlap months: {months}"])
     return section("Tentpole Pattern", lines)
 
 
@@ -93,55 +139,75 @@ def summarize_subscribers(quarterly: pd.DataFrame) -> list[str]:
         ]
     ].copy()
 
-    lines = []
+    lines = [
+        "| Quarter | Paid subs | Reported net adds | Sequential change | Category flags |",
+        "| --- | ---: | ---: | ---: | --- |",
+    ]
     for _, row in display.iterrows():
         net_adds = row["net_adds_millions"]
         reported_net = "not reported" if pd.isna(net_adds) else f"{net_adds:g}M"
         calculated = row["calculated_sequential_change_millions"]
         calculated_text = "n.a." if pd.isna(calculated) else f"{calculated:g}M"
+        flags = []
+        if row["has_sports_tentpole"]:
+            flags.append("Sports")
+        if row["has_entertainment_tentpole"]:
+            flags.append("Entertainment")
+        if row["has_mixed_tentpole"]:
+            flags.append("Mixed")
+        flag_text = " + ".join(flags) if flags else "None"
         lines.append(
-            f"{row['fiscal_quarter']}: "
-            f"{row['paid_subscribers_millions']:g}M paid subs, "
-            f"reported net adds {reported_net}, "
-            f"sequential change {calculated_text}, "
-            f"sports={format_bool(row['has_sports_tentpole'])}, "
-            f"entertainment={format_bool(row['has_entertainment_tentpole'])}, "
-            f"mixed={format_bool(row['has_mixed_tentpole'])}"
+            f"| {row['fiscal_quarter']} | "
+            f"{row['paid_subscribers_millions']:g}M | "
+            f"{reported_net} | "
+            f"{calculated_text} | "
+            f"{flag_text} |"
         )
-    return section("Quarterly Subscriber Movement", lines)
+    return section("Evidence: Quarterly Subscriber Movement", lines)
 
 
-def summarize_takeaways(monthly: pd.DataFrame, quarterly: pd.DataFrame) -> list[str]:
-    top_month = monthly.sort_values(
-        "share_of_total_tv_viewing", ascending=False
-    ).iloc[0]
-    strongest_sub_quarter = quarterly.sort_values(
-        "net_adds_millions", ascending=False, na_position="last"
-    ).iloc[0]
+def summarize_interpretation() -> list[str]:
+    lines = bullets(
+        [
+            "Sports tentpoles appear to be Peacock's strongest reach events. They line up "
+            "with the largest monthly viewing-share observations and several reported "
+            "subscriber-add quarters.",
+            "Entertainment tentpoles appear to work differently. Love Island is less like "
+            "a one-day acquisition event and more like a recurring summer engagement engine.",
+            "Mixed and distribution-driven rows should be interpreted separately from "
+            "content-led demand. The 2025-Q1 Charter bundle row is important, but it is not "
+            "the same mechanism as Olympics or Love Island viewing lift.",
+        ]
+    )
+    return section("Interpretation", lines)
 
-    lines = [
-        f"1. The highest observed Peacock viewing month is "
-        f"{top_month['period_month']:%Y-%m} at "
-        f"{top_month['share_of_total_tv_viewing']:.1f}% TV share.",
-        "2. Sports tentpoles dominate the largest TV-share observations, "
-        "while Love Island adds repeatable summer entertainment lift.",
-        f"3. The largest reported quarterly paid-subscriber gain in this panel is "
-        f"{strongest_sub_quarter['fiscal_quarter']} with "
-        f"{strongest_sub_quarter['net_adds_millions']:g}M net adds.",
-        "4. Treat this as directional public-source analysis: Nielsen months and "
-        "Comcast quarters are different grains, and missing public values are not estimated.",
-    ]
-    return section("Early Takeaways", lines)
+
+def summarize_limitations() -> list[str]:
+    lines = bullets(
+        [
+            "Nielsen viewing rows are monthly or Nielsen measurement-month observations; "
+            "Comcast subscriber rows are quarterly observations.",
+            "The dataset does not interpolate monthly subscribers and does not estimate "
+            "missing values.",
+            "Subscriber counts are rounded public disclosures, so small sequential moves "
+            "can be hidden by rounding.",
+            "The analysis is directional and source-grounded; it should not be read as "
+            "causal proof without deeper campaign, spend, conversion, and retention data.",
+        ]
+    )
+    return section("Limitations", lines)
 
 
 def build_report(monthly: pd.DataFrame, quarterly: pd.DataFrame) -> str:
     lines = [
         "# Peacock Marketing Insights",
         "",
+        *summarize_executive_summary(monthly, quarterly),
         *summarize_top_viewing_months(monthly),
         *summarize_tentpole_patterns(monthly),
         *summarize_subscribers(quarterly),
-        *summarize_takeaways(monthly, quarterly),
+        *summarize_interpretation(),
+        *summarize_limitations(),
     ]
     return "\n".join(lines).rstrip() + "\n"
 
