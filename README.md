@@ -60,6 +60,12 @@ This writes:
 - `analysis/monthly_peacock_panel.csv`
 - `analysis/quarterly_subscriber_panel.csv`
 
+Summarize first-pass marketing insights:
+
+```bash
+.venv/bin/python scripts/summarize_insights.py
+```
+
 Load in Python:
 
 ```python
